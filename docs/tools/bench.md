@@ -38,6 +38,7 @@ The current benchmarks are:
 * `bubblesort`: Sorting algorithm that works by repeatedly swapping the adjacent elements if they are in wrong order. 
 * `pow`: Computes the n^<sup>th</sup> power of a given (float) number.
 * `up-arrow`: Computes [Knuth's up arrow][uparrow] notation, with the first argument being the number, the second argument being the number of Knuth's up arrows, and the third argument being the number of repeats.  
+* `max-subarray`: solution to the classic Maximum Subarray problem.
 
 Credit for several of these benchmarks goes to Alexa VanHattum and Gregory Yauney, who implemented them for their [global value numbering project][gvnblog].
 
