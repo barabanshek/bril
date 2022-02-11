@@ -24,13 +24,26 @@ def flatten_bbs(bbs):
     return instrs
 
 # For more advanced lvn optimizations (e.g. commutative property), add in here
+kFoldableOps = ["add", "mul"]
 def compare_tuples(t1, t2):
     if len(t1) != len(t2):
         return False
+
+    op1 = t1[0]
+    op2 = t2[0]
+    if not op1 == op2:
+        return False
+
+    t1 = t1[1:]
+    t2 = t2[1:]
+    if op1 in kFoldableOps:
+        t11 = t1[::-1]
+        if (not t1 == t2) and (not t11 == t2):
+            return False
     else:
-        for e1, e2 in zip(t1, t2):
-            if e1 != e2:
-                return False
+        if not t1 == t2:
+            return False
+
     return True
 
 def bb_lvn(bb):

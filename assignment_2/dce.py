@@ -61,14 +61,16 @@ def do_reassign_elimination(function):
                     if not arg in var_reads.keys():
                         var_reads[arg] = [idx]
                     else:
-                        var_reads[arg].append(idx)
-    
+                        if not idx in var_reads[arg]:
+                            var_reads[arg].append(idx)
+
         # See what we can remove
         for var in vars.keys():
             intervals = vars[var]
             if not var in var_reads:
                 continue
             usages = var_reads[var]
+            #print(var, ":", usages, "->", intervals)
             for i in range(len(intervals) - 1):
                 left = intervals[i]
                 right = intervals[i+1]
@@ -80,14 +82,19 @@ def do_reassign_elimination(function):
                 if not used:
                     del instrs[left]
 
+            # check last insstruction in each interval
+            if (intervals[-1] > usages[-1]):
+                del instrs[intervals[-1]]
+
     removed_cnt = instr_cnt - len(instrs)
     return removed_cnt
 
 def do_dce_function_pass_converge(function):
-    do_reassign_elimination(function)
     do = True
     while do:
         do = do_dce_function_pass(function) > 0 or do_reassign_elimination(function) > 0
+
+    do_dce_function_pass(function)
 
 def doTrivialDCE():
     bril_json = json.load(sys.stdin)
