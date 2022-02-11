@@ -12,7 +12,7 @@ def do_dce_function_pass(function):
         args = instr.get("args")
         if args:
             for arg in args:
-                r_args.update(arg)
+                r_args.update({arg})
 
     # Remove stuff
     for instr in instrs:
