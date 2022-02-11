@@ -46,6 +46,22 @@ def compare_tuples(t1, t2):
 
     return True
 
+kFoldabelOps = {
+    'add': lambda a, b: a + b,
+    'mul': lambda a, b: a * b,
+    'sub': lambda a, b: a - b,
+    'div': lambda a, b: a // b,
+    'gt': lambda a, b: a > b,
+    'lt': lambda a, b: a < b,
+    'ge': lambda a, b: a >= b,
+    'le': lambda a, b: a <= b,
+    'ne': lambda a, b: a != b,
+    'eq': lambda a, b: a == b,
+    'or': lambda a, b: a or b,
+    'and': lambda a, b: a and b,
+    'not': lambda a: not a
+}
+
 def bb_lvn(bb):
     # [((val), var)]
     lvn_table = []
@@ -98,6 +114,28 @@ def bb_lvn(bb):
                         new_args.append(arg)
                 instr["args"] = new_args
                 new_instrs.append(instr)
+
+        # Try to fold
+        try:
+            if instr.get("op") in kFoldabelOps:
+                # check if both args are const
+                both_args_const = True
+                const_args = []
+                for arg in instr.get("args"):
+                    if not lvn_table[heap[arg]][0][0] == "const":
+                        both_args_const = False
+                    else:
+                        const_args.append(lvn_table[heap[arg]][0][1])
+
+                if (both_args_const):
+                        if len(const_args) == 1:
+                            res = kFoldabelOps[instr.get("op")](const_args[0])
+                        else:
+                            res = kFoldabelOps[instr.get("op")](const_args[0], const_args[1])
+                        # replace with const
+                        new_instrs[-1] = {"dest": instr.get("dest"), "type": instr.get("type"), "op": "const", "value": res}
+        except (ZeroDivisionError, KeyError) as error:
+            continue
 
     return new_instrs
 
