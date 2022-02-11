@@ -69,6 +69,7 @@ def bb_lvn(bb):
     heap = {}
     # new instructions
     new_instrs = []
+    fold_cnt = 0
     for instr in bb:
         # form touple val
         val_tuple = []
@@ -134,10 +135,14 @@ def bb_lvn(bb):
                             res = kFoldabelOps[instr.get("op")](const_args[0], const_args[1])
                         # replace with const
                         new_instrs[-1] = {"dest": instr.get("dest"), "type": instr.get("type"), "op": "const", "value": res}
+                        # incr fold counter
+                        fold_cnt = fold_cnt + 1
+
+
         except (ZeroDivisionError, KeyError) as error:
             continue
 
-    return new_instrs
+    return (fold_cnt, new_instrs)
 
 # Simple lvn pass
 def do_lvn_pass(function):
@@ -147,7 +152,12 @@ def do_lvn_pass(function):
     bbs = form_bbs(function)
     new_bbs = []
     for bb in bbs:
-        new_bbs.append(bb_lvn(bb))
+        do = True
+        while(do):
+            len_, bb = bb_lvn(bb)
+            do = len_ > 0
+
+        new_bbs.append(bb)
     
     function['instrs'] = flatten_bbs(new_bbs)
 
