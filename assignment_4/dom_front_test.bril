@@ -1,0 +1,30 @@
+# ARGS: tree
+@main {
+.entry:
+  x: int = const 0;
+  i: int = const 0;
+  one: int = const 1;
+  max: int = const 10;
+  cond: bool = lt i max;
+  br cond .block_B .main;
+
+.main:
+  max: int = const 10;
+  cond: bool = lt i max;
+  br cond .body_1 .body_2;
+
+.body_1:
+    x: int = add x one;
+    jmp .body;
+
+.body_2:
+    x: int = add x one;
+    jmp .body;
+
+.body:
+    x: int = add x one;
+    jmp .block_B;
+
+.block_B:
+    print x;
+}
