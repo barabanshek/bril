@@ -84,6 +84,34 @@ def compute_dom_front(cfg, doms):
 
     return frontier
 
+def dfs(cfg, path, node, target_node, paths):
+    l_path = path.copy()
+    l_path.append(node)
+    if node == target_node:
+        paths.append(l_path)
+    else:
+        cfg[node]['in'] = 1
+        for succ in cfg[node]['succ']:
+            if not cfg[succ]['in'] == 1:
+                dfs(cfg, l_path, succ, target_node, paths)
+
+def find_all_paths(cfg, node1, node2):
+    paths = []
+    dfs(cfg, [], node1, node2, paths)
+    return paths
+
+def check_dom(cfg, doms):
+    for v, ds in doms.items():
+        for d in ds:
+            if not d == v:
+                # d dominates v
+                # check that all paths to v contain d
+                paths = find_all_paths(cfg, 0, v)
+                for path in paths:
+                    if not d in path:
+                        return False
+    return True
+
 def form_cfg(function):
     instrs = function['instrs']
 
@@ -144,6 +172,9 @@ def doDfPass(pass_name):
         print("Dominator tree:\n", dom_tree)
         frontier = compute_dom_front(cfg, doms)
         print("Domination Fronties:\n", frontier)
+
+        print("Correctness for get_dominators() -> ", check_dom(cfg, doms))
+
 
 def doOpt():
     doDfPass('const_prop')
