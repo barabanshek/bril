@@ -24,8 +24,3 @@
   ret t2;
 }
 
-@main(m: int, n: int) {
-  tmp: int = call @ack m n;
-  print tmp;
-}
-
