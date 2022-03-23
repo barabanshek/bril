@@ -20,13 +20,18 @@ namespace
     SkeletonPass() : FunctionPass(ID) {}
 
     static constexpr size_t kOpCodeBr = 2;
+    static constexpr size_t kOpCodeAdd = 13;
+    static constexpr size_t kOpCodeSub = 15;
+    static constexpr size_t kOpCodeMul = 17;
+    static constexpr size_t kOpCodeDiv = 19;
 
-    void print_bb(BasicBlock *bb)
+    void print_bb(BasicBlock *bb, Loop *loop)
     {
       for (BasicBlock::iterator instr = bb->begin(), ee = bb->end();
            instr != ee; ++instr)
       {
-        errs() << "    " << *instr << "\n";
+        const Instruction *V = &(*instr);
+        errs() << "    " << *instr << " : " << loop->hasLoopInvariantOperands(V) << " op= " << instr->getOpcode() << "\n";
       }
     }
 
@@ -35,12 +40,12 @@ namespace
       BasicBlock *preheader = loop->getLoopPreheader();
       errs() << "------- PREHEADER_BB --------"
              << "\n";
-      print_bb(preheader);
+      print_bb(preheader, loop);
       for (auto bb = loop->block_begin(), be = loop->block_end(); bb != be; ++bb)
       {
         errs() << "------- BB --------"
                << "\n";
-        print_bb(*bb);
+        print_bb(*bb, loop);
       }
     }
 
@@ -69,18 +74,18 @@ namespace
                  instr != ee; ++instr)
             {
               const Instruction *V = &(*instr);
-              if (L->isLoopInvariant (V))
+              if (L->hasLoopInvariantOperands (V))
               {
                 // We don't move the following instructions:
                 //  if it's in loop header or footer
                 if (bb == L->block_begin() || bb == L->block_end() - 1)
                   continue;
 
-                //  if it's a branch instruction (let's be conservative)
-                if (instr->getOpcode() == kOpCodeBr)
-                  continue;
-
-                instr_to_move.push_back(instr);
+                //  do it for mul/sub/add/div so far
+                if (instr->getOpcode() == kOpCodeAdd || instr->getOpcode() == kOpCodeDiv || instr->getOpcode() == kOpCodeMul || instr->getOpcode() == kOpCodeSub)
+                {
+                  instr_to_move.push_back(instr);
+                }
               }
             }
           }
@@ -91,10 +96,13 @@ namespace
             errs() << "   TO MOVE: " << *(i) << "\n";
           }
 
-          if (instr_to_move.size() > 0) {
+          if (instr_to_move.size() > 0)
+          {
             Instruction *end = &(preheader->back());
             instr_to_move[0]->moveBefore(end);
-          } else {
+          }
+          else
+          {
             do_ = false;
           }
 
