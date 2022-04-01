@@ -1,0 +1,25 @@
+@coo(size: int) : ptr<int> {
+  loc: ptr<int> = alloc size;
+  loc: ptr<int> = alloc size;
+  loc: ptr<int> = alloc size;
+  loc_1: ptr<int> = alloc size;
+  ret loc_1;
+}
+
+@main {
+  ten: int = const 10;
+  one : int = const 1;
+  ptr1 : ptr<int> = call @coo ten;
+  i : int = const 0;
+.loop:
+  cond : bool = lt i ten;
+  br cond .body .done;
+.body:
+  ptr2 : ptr<int> = ptradd ptr1 one;
+  i : int = add i one;
+  jmp .loop;
+.done:
+  free mtptr;
+  print i;
+  ret;
+}

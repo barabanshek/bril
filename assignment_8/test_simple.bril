@@ -1,0 +1,54 @@
+# Test_1
+
+@foo(size: int, i: int) : int {
+  local_array: ptr<int> = alloc size;
+  i: int = const 1;
+  ret i;
+}
+
+@boo(size: int, i: int) : ptr<int> {
+  local_array_unused: ptr<int> = alloc size;
+  local_array: ptr<int> = alloc size;
+  loc: ptr<int> = ptradd local_array i;
+  store loc i;
+  ret local_array;
+}
+
+@coo(ptr_in: ptr<int>, i: int) : ptr<int> {
+  loc: ptr<int> = ptradd ptr_in i;
+  store loc i;
+  ret loc;
+}
+
+@main(size: int, i: int) {
+  array: ptr<int> = alloc size;
+
+  array_1: ptr<int> = ptradd array i;
+  array_2: ptr<int> = ptradd array i;
+
+  val: int = call @foo size i;
+  array_6: ptr<int> = call @boo size i;
+
+  array_3: ptr<int> = ptradd array i;
+  array_4: ptr<int> = ptradd array_3 i;
+  array_5: ptr<int> = ptradd array_4 i;
+
+  array_7: ptr<int> = id array_5;
+
+  loc: ptr<int> = ptradd array_6 i;
+  elem: int = load loc;
+  print elem;
+
+  array_8: ptr<int> = id loc;
+  elem_1: int = load array_8;
+  print elem_1;
+
+  array_10: ptr<int> = alloc size;
+  array_11: ptr<int> = call @coo array_10 i;
+  elem_2: int = load array_11;
+  print elem_2;
+
+  array_20: ptr<int> = alloc size;
+  loc_20: ptr<int> = ptradd array_20 i;
+  loc_20: ptr<int> = ptradd array_20 i;
+}
