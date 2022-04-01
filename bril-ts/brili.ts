@@ -404,7 +404,7 @@ type State = {
 /**
  * Interpet a call instruction.
  */
-function evalCall(instr: bril.Operation, state: State): Action {
+function evalCall(instr: bril.Operation, state: State, outer_f_name: bril.Ident): Action {
   // Which function are we calling?
   let funcName = getFunc(instr, 0);
   let func = findFunc(funcName, state.funcs);
@@ -488,7 +488,7 @@ function evalCall(instr: bril.Operation, state: State): Action {
     // Handle GC
     if (retVal.hasOwnProperty("loc")) {
       let p: Pointer = retVal as Pointer
-      state.gc.assignPointer(p, instr.dest + funcName)
+      state.gc.assignPointer(p, instr.dest + outer_f_name)
     }
   }
 
@@ -504,7 +504,7 @@ function evalCall(instr: bril.Operation, state: State): Action {
  * otherwise, return "next" to indicate that we should proceed to the next
  * instruction or "end" to terminate the function.
  */
-function evalInstr(instr: bril.Instruction, state: State, f_name: bril.Ident, line_i: number): Action {
+function evalInstr(instr: bril.Instruction, state: State, f_name: bril.Ident): Action {
   state.icount += BigInt(1);
 
   // Check that we have the right number of arguments.
@@ -547,7 +547,7 @@ function evalInstr(instr: bril.Instruction, state: State, f_name: bril.Ident, li
     // Handle GC
     if (val.hasOwnProperty("loc")) {
       let p: Pointer = val as Pointer
-      state.gc.assignPointer(p, instr.dest + f_name + line_i.toString)
+      state.gc.assignPointer(p, instr.dest + f_name)
     }
 
     return NEXT;
@@ -720,7 +720,7 @@ function evalInstr(instr: bril.Instruction, state: State, f_name: bril.Ident, li
   }
 
   case "call": {
-    return evalCall(instr, state);
+    return evalCall(instr, state, f_name);
   }
 
   case "alloc": {
@@ -734,7 +734,7 @@ function evalInstr(instr: bril.Instruction, state: State, f_name: bril.Ident, li
 
     // Handle GC
     state.gc.appendNewLocation(ptr.loc)
-    state.gc.assignPointer(ptr, instr.dest + f_name + line_i.toString)
+    state.gc.assignPointer(ptr, instr.dest + f_name)
 
     return NEXT;
   }
@@ -768,7 +768,7 @@ function evalInstr(instr: bril.Instruction, state: State, f_name: bril.Ident, li
     state.env.set(instr.dest, { loc: ptr.loc.add(Number(val)), type: ptr.type })
     
     // Handle GC
-    state.gc.assignPointer(ptr, instr.dest + f_name + line_i.toString)
+    state.gc.assignPointer(ptr, instr.dest + f_name)
 
     return NEXT;
   }
@@ -831,7 +831,7 @@ function evalFunc(func: bril.Function, state: State): Value | null {
     let line = func.instrs[i];
     if ('op' in line) {
       // Run an instruction.
-      let action = evalInstr(line, state, func.name, i);
+      let action = evalInstr(line, state, func.name);
 
       // Take the prescribed action.
       switch (action.action) {
