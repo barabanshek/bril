@@ -13,6 +13,88 @@ class BriliError extends Error {
   }
 }
 
+class GC {
+  // <base_pointer -> reference counter>
+  private ref_counters: Map<number, number>
+  private seen_pointers: Map<bril.Ident, number>
+  private heap: Heap<Value>
+
+  constructor(h: Heap<Value>) {
+    this.ref_counters = new Map()
+    this.seen_pointers = new Map()
+    this.heap = h
+  }
+
+  appendNewLocation(loc: Key) {
+    let cnt = this.ref_counters.get(loc.base)
+    if (typeof cnt != 'undefined') {
+      throw error(`Error: appending a location that already exists in the GC heap`);
+      return
+    }
+
+    this.ref_counters.set(loc.base, 0)
+  }
+
+  freeLocation(loc: Key) {
+    let cnt = this.ref_counters.get(loc.base)
+    if (cnt != 0) {
+      throw error(`Error: attempting to free a location with a non-zero reference counter`);
+      return
+    }
+
+    this.heap.free_from_gc(loc, loc.base);
+  }
+
+  // Just increment ptr
+  incrLocCounter(loc: Key) {
+    let cnt = this.ref_counters.get(loc.base)
+    if (typeof cnt == 'undefined') {
+      throw error(`Error: incr location counter is called on an undefined location`);
+      return
+    }
+
+    this.ref_counters.set(loc.base, cnt + 1)
+  }
+
+  // Decr ptr, and if it becomes zero, free memory
+  decrLocCounter(loc: Key) {
+    let cnt = this.ref_counters.get(loc.base)
+    if (typeof cnt == 'undefined') {
+      throw error(`Error: decr location counter is called on an undefined location`);
+      return
+    }
+    if (cnt == 0) {
+      throw error(`Error: decr location counter for the location that is already zero`);
+      return
+    }
+
+    this.ref_counters.set(loc.base, cnt - 1)
+
+    if (cnt == 1) {
+      this.freeLocation(loc)
+    }
+  }
+
+  assignPointer(p: Pointer, name: bril.Ident) {
+    // Check here if we have already handled this pointer (like in loops)
+    let cnt = this.seen_pointers.get(name)
+    if (typeof cnt == 'undefined') {
+      this.incrLocCounter(p.loc)
+      this.seen_pointers.set(name, 0)
+    }
+  }
+
+  // Decr counters for all pointers defined in this env
+  handleOutOfScope(env: Env) {
+    for(let [key, value] of env) {
+      if (value.hasOwnProperty("loc")) {
+        let p: Pointer = value as Pointer
+        this.decrLocCounter(p.loc)
+      }
+    }
+  }
+}
+
 /**
  * Create an interpreter error object to throw.
  */
@@ -80,6 +162,12 @@ export class Heap<X> {
         } else {
             throw error(`Tried to free illegal memory location base: ${key.base}, offset: ${key.offset}. Offset must be 0.`);
         }
+    }
+
+    // Same as free() but without checking for offset
+    free_from_gc(key: Key, base: number) {
+      this.freeKey(key);
+      this.storage.delete(base);
     }
 
     write(key: Key, val: X) {
@@ -299,6 +387,7 @@ let NEXT: Action = {"action": "next"};
 type State = {
   env: Env,
   readonly heap: Heap<Value>,
+  gc: GC,
   readonly funcs: readonly bril.Function[],
 
   // For profiling: a total count of the number of instructions executed.
@@ -343,6 +432,12 @@ function evalCall(instr: bril.Operation, state: State): Action {
 
     // Set the value of the arg in the new (function) environment.
     newEnv.set(params[i].name, value);
+    
+    // Handle GC
+    if (value.hasOwnProperty("loc")) {
+      let p: Pointer = value as Pointer
+      state.gc.assignPointer(p, params[i].name + funcName)
+    }
   }
 
   // Invoke the interpreter on the function.
@@ -350,6 +445,7 @@ function evalCall(instr: bril.Operation, state: State): Action {
     env: newEnv,
     heap: state.heap,
     funcs: state.funcs,
+    gc: state.gc,
     icount: state.icount,
     lastlabel: null,
     curlabel: null,
@@ -388,7 +484,17 @@ function evalCall(instr: bril.Operation, state: State): Action {
       throw error(`type of value returned by function does not match declaration`);
     }
     state.env.set(instr.dest, retVal);
+
+    // Handle GC
+    if (retVal.hasOwnProperty("loc")) {
+      let p: Pointer = retVal as Pointer
+      state.gc.assignPointer(p, instr.dest + funcName)
+    }
   }
+
+  // Release all memories in this scope.
+  state.gc.handleOutOfScope(newEnv)
+
   return NEXT;
 }
 
@@ -398,7 +504,7 @@ function evalCall(instr: bril.Operation, state: State): Action {
  * otherwise, return "next" to indicate that we should proceed to the next
  * instruction or "end" to terminate the function.
  */
-function evalInstr(instr: bril.Instruction, state: State): Action {
+function evalInstr(instr: bril.Instruction, state: State, f_name: bril.Ident, line_i: number): Action {
   state.icount += BigInt(1);
 
   // Check that we have the right number of arguments.
@@ -437,6 +543,13 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
   case "id": {
     let val = getArgument(instr, state.env, 0);
     state.env.set(instr.dest, val);
+
+    // Handle GC
+    if (val.hasOwnProperty("loc")) {
+      let p: Pointer = val as Pointer
+      state.gc.assignPointer(p, instr.dest + f_name + line_i.toString)
+    }
+
     return NEXT;
   }
 
@@ -618,12 +731,17 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
     }
     let ptr = alloc(typ, Number(amt), state.heap);
     state.env.set(instr.dest, ptr);
+
+    // Handle GC
+    state.gc.appendNewLocation(ptr.loc)
+    state.gc.assignPointer(ptr, instr.dest + f_name + line_i.toString)
+
     return NEXT;
   }
 
   case "free": {
-    let val = getPtr(instr, state.env, 0);
-    state.heap.free(val.loc);
+  //  let val = getPtr(instr, state.env, 0);
+  //  state.heap.free(val.loc);
     return NEXT;
   }
 
@@ -648,6 +766,10 @@ function evalInstr(instr: bril.Instruction, state: State): Action {
     let ptr = getPtr(instr, state.env, 0)
     let val = getInt(instr, state.env, 1)
     state.env.set(instr.dest, { loc: ptr.loc.add(Number(val)), type: ptr.type })
+    
+    // Handle GC
+    state.gc.assignPointer(ptr, instr.dest + f_name + line_i.toString)
+
     return NEXT;
   }
 
@@ -709,7 +831,7 @@ function evalFunc(func: bril.Function, state: State): Value | null {
     let line = func.instrs[i];
     if ('op' in line) {
       // Run an instruction.
-      let action = evalInstr(line, state);
+      let action = evalInstr(line, state, func.name, i);
 
       // Take the prescribed action.
       switch (action.action) {
@@ -835,9 +957,13 @@ function evalProg(prog: bril.Program) {
   let expected = main.args || [];
   let newEnv = parseMainArguments(expected, args);
 
+  // Add GC
+  let gc_ = new GC(heap)
+
   let state: State = {
     funcs: prog.functions,
     heap,
+    gc: gc_,
     env: newEnv,
     icount: BigInt(0),
     lastlabel: null,
@@ -845,6 +971,9 @@ function evalProg(prog: bril.Program) {
     specparent: null,
   }
   evalFunc(main, state);
+
+  // Release all memories in this scope.
+  gc_.handleOutOfScope(newEnv)
 
   if (!heap.isEmpty()) {
     throw error(`Some memory locations have not been freed by end of execution.`);
