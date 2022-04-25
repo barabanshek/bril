@@ -1,0 +1,24 @@
+# ARGS: live
+
+@main(size: int) {
+  a: int = const 5;
+  b: int = const 10;
+  d: int = const 15;
+  e: int = const 20;
+  f: int = const 25;
+  cond: bool = eq size b;
+  br cond .left .right;
+.left:
+  b: int = const 1;
+  c: int = const 5;
+  jmp .end;
+.right:
+  a: int = const 2;
+  cc: int = add d e;
+  dd: int = add e f;
+  c: int = add dd cc;
+  jmp .end;
+.end:
+  d: int = sub a c;
+  print d;
+}

@@ -1,6 +1,26 @@
 #!/usr/bin/env node
 import * as bril from './bril';
 import {readStdin, unreachable} from './util';
+import { readFileSync, writeFileSync, appendFileSync, promises as fsPromises } from 'fs';
+import { join } from 'path';
+import { trace } from 'console';
+
+class JIT {
+  private trace: bril.Instruction[]
+
+  constructor() {
+    this.trace = [];
+  }
+
+  recordTrace(instr: bril.Instruction) {
+    this.trace.push(instr);
+  }
+
+  dumpTraceToFile() {
+    appendFileSync("trace.jit", JSON.stringify(this.trace));
+    appendFileSync("trace.jit", "\n");
+  }
+}
 
 /**
  * An interpreter error to print to the console.
@@ -63,10 +83,10 @@ class GC {
       throw error(`Error: decr location counter is called on an undefined location`);
       return
     }
-    if (cnt == 0) {
-      throw error(`Error: decr location counter for the location that is already zero`);
-      return
-    }
+  //  if (cnt == 0) {
+  //    throw error(`Error: decr location counter for the location that is already zero`);
+  //    return
+  //  }
 
     this.ref_counters.set(loc.base, cnt - 1)
 
@@ -78,10 +98,10 @@ class GC {
   assignPointer(p: Pointer, name: bril.Ident) {
     // Check here if we have already handled this pointer (like in loops)
     let cnt = this.seen_pointers.get(name)
-    if (typeof cnt == 'undefined') {
+  //  if (typeof cnt == 'undefined') {
       this.incrLocCounter(p.loc)
       this.seen_pointers.set(name, 0)
-    }
+  //  }
   }
 
   // Decr counters for all pointers defined in this env
@@ -388,6 +408,7 @@ type State = {
   env: Env,
   readonly heap: Heap<Value>,
   gc: GC,
+  jit: JIT,
   readonly funcs: readonly bril.Function[],
 
   // For profiling: a total count of the number of instructions executed.
@@ -446,6 +467,7 @@ function evalCall(instr: bril.Operation, state: State, outer_f_name: bril.Ident)
     heap: state.heap,
     funcs: state.funcs,
     gc: state.gc,
+    jit: state.jit,
     icount: state.icount,
     lastlabel: null,
     curlabel: null,
@@ -831,6 +853,7 @@ function evalFunc(func: bril.Function, state: State): Value | null {
     let line = func.instrs[i];
     if ('op' in line) {
       // Run an instruction.
+      state.jit.recordTrace(line);
       let action = evalInstr(line, state, func.name);
 
       // Take the prescribed action.
@@ -960,10 +983,14 @@ function evalProg(prog: bril.Program) {
   // Add GC
   let gc_ = new GC(heap)
 
+  // Add JIT
+  let jit_ = new JIT()
+
   let state: State = {
     funcs: prog.functions,
     heap,
     gc: gc_,
+    jit: jit_,
     env: newEnv,
     icount: BigInt(0),
     lastlabel: null,
@@ -971,6 +998,9 @@ function evalProg(prog: bril.Program) {
     specparent: null,
   }
   evalFunc(main, state);
+
+  // Dunm trace.
+  jit_.dumpTraceToFile();
 
   // Release all memories in this scope.
   gc_.handleOutOfScope(newEnv)
